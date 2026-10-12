@@ -1,7 +1,6 @@
 HELP_TEXT = """
-============================================================
   📭 Multi OSINT Tool - Help Menu
-============================================================
+  
 Usage:
   python main.py [OPTION] <QUERY>
 
@@ -20,5 +19,4 @@ Examples:
   python main.py -r SomeRobloxUser
   python main.py -i 8.8.8.8
 
-============================================================
 """
