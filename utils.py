@@ -6,25 +6,18 @@ from colorama import Fore, Style, init
 # Initialize colorama
 init(autoreset=True)
 
-# The raw ASCII art (No color codes needed, we apply them dynamically)
-RAW_ASCII_ART = r"""
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣠⣤⣤⣶⣶⣶⣤⣤⣄⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀     _____           __
-⠀⠀⠀⠀⠀⢀⣤⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣄⠀⠀⠀⠀⠀⠀    / ___/___  ___  / /_____  _____
-⠀⠀⠀⣠⣶⣿⣿⡿⣿⣿⣿⡿⠋⠉⠀⠀⠉⠙⢿⣿⣿⡿⣿⣿⣷⣦⡀⠀⠀⠀   \__ \/ _ \/ _ \/ //_/ _ \/ ___/
-⠀⢀⣼⣿⣿⠟⠁⢠⣿⣿⠏⠀⠀⢠⣤⣤⡀⠀⠀⢻⣿⣿⡀⠙⢿⣿⣿⣦⠀⠀  ___/ /  __/  __/ ,< /  __/ /
-⣰⣿⣿⡟⠁⠀⠀⢸⣿⣿⠀⠀⠀⢿⣿⣿⡟⠀⠀⠈⣿⣿⡇⠀⠀⠙⣿⣿⣷⡄ /____/\___/\___/_/|_|\___/_/
-⠈⠻⣿⣿⣦⣄⠀⠸⣿⣿⣆⠀⠀⠀⠉⠉⠀⠀⠀⣸⣿⣿⠃⢀⣤⣾⣿⣿⠟⠁
-⠀⠀⠈⠻⣿⣿⣿⣶⣿⣿⣿⣦⣄⠀⠀⠀⢀⣠⣾⣿⣿⣿⣾⣿⣿⡿⠋⠁⠀⠀
-⠀⠀⠀⠀⠀⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠁⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠛⠛⠿⠿⠿⠿⠿⠿⠿⠿⠛⠉⠀⠀
-
-     ~: 📭 Multi OSINT Tool :~
-        => Made by @Slurd
+# Your exact ASCII art. Using r""" to safely handle the backslashes
+ASCII_ART = r"""
+    .---.       _____           __
+   / .-. \     / ___/___  ___  / /_____  _____
+  | |   | |   \__ \/ _ \/ _ \/ //_/ _ \/ ___/
+   \ '-' /    ___/ /  __/  __/ ,< /  __/ /
+    '---'    /____/\___/\___/_/|_|\___/_/
 """
 
 def print_banner():
     """Print the ASCII art with a smooth red-to-white vertical gradient."""
-    lines = RAW_ASCII_ART.strip('\n').split('\n')
+    lines = ASCII_ART.strip('\n').split('\n')
     total_lines = len(lines)
     
     for i, line in enumerate(lines):
@@ -36,10 +29,9 @@ def print_banner():
         g = int(255 * progress)
         b = int(255 * progress)
         
-        # ANSI TrueColor escape code (Works perfectly in Kali Linux)
+        # ANSI TrueColor escape code
         color_code = f"\033[38;2;{r};{g};{b}m"
         
-        # Print the line with its specific gradient color
         print(f"{color_code}{line}")
         
     # Reset the color back to normal after the art
