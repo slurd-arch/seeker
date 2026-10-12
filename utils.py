@@ -6,27 +6,47 @@ from colorama import Fore, Style, init
 # Initialize colorama
 init(autoreset=True)
 
-ASCII_ART = r"""
-⠀⠀⠀⠀⠀⠀⠀⣀⣤⣶⣾⣿⣿⣿⣿⣿⣿⣷⣶⣤⣀⠀⠀⠀⠀⠀⠀     _____           __
-⠀⠀⠀⠀⣠⣾⡿⠋⣽⣿⡿⠋⠉⠀⠀⠉⠙⢿⣿⣏⠻⣿⣦⡀⠀⠀⠀    / ___/___  ___  / /_____  _____
-⠀⠀⣰⣿⡟⠁⠀⣼⣿⠏⠀⠀⢀⣤⣤⡀⠀⠀⢻⣿⣧⠀⠈⢿⣷⡀⠀   \__ \/ _ \/ _ \/ //_/ _ \/ ___/
-⢀⣾⣟⠁⠀⠀⢸⣿⣿⠀⠀⠀⢿⣿⣿⡿⠀⠀⠀⣿⣿⡇⠀⠀⠙⣿⣆  ___/ /  __/  __/ ,< /  __/ /
-⠀⠹⣿⣷⣄⠀⠈⣿⣿⣆⠀⠀⠀⠉⠉⠀⠀⠀⣸⣿⣿⠁⠀⢀⣾⣿⠏ /____/\___/\___/_/|_|\___/_/
-⠀⠀⠀⠙⠻⣿⣦⡈⢿⣿⣷⣄⠀⠀⠀⢀⣠⣾⣿⡿⢁⣠⣾⡿⠋⠀⠀
-⠀⠀⠀⠀⠀⠀⠈⠙⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⠛⠁⠀⠀⠀⠀
+# The raw ASCII art (No color codes needed, we apply them dynamically)
+RAW_ASCII_ART = r"""
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣠⣤⣤⣶⣶⣶⣤⣤⣄⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀     _____           __
+⠀⠀⠀⠀⠀⢀⣤⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣄⠀⠀⠀⠀⠀⠀    / ___/___  ___  / /_____  _____
+⠀⠀⠀⣠⣶⣿⣿⡿⣿⣿⣿⡿⠋⠉⠀⠀⠉⠙⢿⣿⣿⡿⣿⣿⣷⣦⡀⠀⠀⠀   \__ \/ _ \/ _ \/ //_/ _ \/ ___/
+⠀⢀⣼⣿⣿⠟⠁⢠⣿⣿⠏⠀⠀⢠⣤⣤⡀⠀⠀⢻⣿⣿⡀⠙⢿⣿⣿⣦⠀⠀  ___/ /  __/  __/ ,< /  __/ /
+⣰⣿⣿⡟⠁⠀⠀⢸⣿⣿⠀⠀⠀⢿⣿⣿⡟⠀⠀⠈⣿⣿⡇⠀⠀⠙⣿⣿⣷⡄ /____/\___/\___/_/|_|\___/_/
+⠈⠻⣿⣿⣦⣄⠀⠸⣿⣿⣆⠀⠀⠀⠉⠉⠀⠀⠀⣸⣿⣿⠃⢀⣤⣾⣿⣿⠟⠁
+⠀⠀⠈⠻⣿⣿⣿⣶⣿⣿⣿⣦⣄⠀⠀⠀⢀⣠⣾⣿⣿⣿⣾⣿⣿⡿⠋⠁⠀⠀
+⠀⠀⠀⠀⠀⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠁⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠛⠛⠿⠿⠿⠿⠿⠿⠿⠿⠛⠉⠀⠀
 
      ~: 📭 Multi OSINT Tool :~
         => Made by @Slurd
 """
 
 def print_banner():
-    """Print the ASCII art banner in Bright Red."""
-    print(Fore.LIGHTRED_EX + ASCII_ART)
-    print(Fore.YELLOW + "=" * 60)
+    """Print the ASCII art with a smooth red-to-white vertical gradient."""
+    lines = RAW_ASCII_ART.strip('\n').split('\n')
+    total_lines = len(lines)
+    
+    for i, line in enumerate(lines):
+        # Calculate gradient progress from 0.0 (top) to 1.0 (bottom)
+        progress = i / (total_lines - 1) if total_lines > 1 else 0
+        
+        # Interpolate from Red (255, 0, 0) to White (255, 255, 255)
+        r = 255
+        g = int(255 * progress)
+        b = int(255 * progress)
+        
+        # ANSI TrueColor escape code (Works perfectly in Kali Linux)
+        color_code = f"\033[38;2;{r};{g};{b}m"
+        
+        # Print the line with its specific gradient color
+        print(f"{color_code}{line}")
+        
+    # Reset the color back to normal after the art
+    print(Style.RESET_ALL + Fore.YELLOW + "=" * 60)
 
 def print_tagline():
     """Print the tagline in normal terminal color."""
-    # Since autoreset=True is on, a standard print() will use normal color
     print("Search inputs through countless databreaches, dataleaks, and stealerlogs\n")
 
 def load_config():
