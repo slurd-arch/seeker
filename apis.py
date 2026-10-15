@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils import print_error, print_success, print_info
 from username_checker import UsernameChecker
 
+
 class OSINTLookup:
     def __init__(self, config):
         self.config = config
@@ -39,7 +40,102 @@ class OSINTLookup:
         return None
 
     # ============================================================
-    # FREE SOURCES
+    # FREE BREACH SOURCES (NO KEY)
+    # ============================================================
+
+    def check_proxynova(self, username):
+        """ProxyNova COMB — 3.2 BILLION leaked creds, free, no key."""
+        res = self._request("GET", f"https://api.proxynova.com/comb?query={username}&limit=100")
+        if res and res.status_code == 200:
+            d = res.json()
+            lines = d.get("lines", [])
+            if lines:
+                records = []
+                for line in lines[:100]:
+                    if ":" in line:
+                        email, pw = line.split(":", 1)
+                        records.append({"email": email, "password": pw, "raw": line})
+                    else:
+                        records.append({"raw": line})
+                return "ProxyNova COMB", {
+                    "count": d.get("count", len(records)),
+                    "records": records,
+                }
+        return "ProxyNova COMB", None
+
+    def check_leakcheck_public(self, query):
+        """LeakCheck public API — free, no key. Returns breach source names."""
+        res = self._request("GET", f"https://leakcheck.io/api/public?check={query}")
+        if res and res.status_code == 200:
+            d = res.json()
+            if d.get("success") and d.get("sources"):
+                return "LeakCheck (Public)", {
+                    "found": d.get("found"),
+                    "fields": d.get("fields"),
+                    "sources": d.get("sources"),
+                }
+        return "LeakCheck (Public)", None
+
+    def check_hibp_breaches(self, query):
+        """HIBP public breach list — free, no key."""
+        res = self._request("GET", "https://haveibeenpwned.com/api/v3/breaches",
+                            headers={"User-Agent": "Seeker-OSINT"})
+        if res and res.status_code == 200:
+            breaches = res.json()
+            matches = [b for b in breaches
+                       if query.lower() in b.get("Name", "").lower()
+                       or query.lower() in b.get("Description", "").lower()
+                       or query.lower() in b.get("Title", "").lower()]
+            if matches:
+                return "HIBP (Breach List)", [
+                    {
+                        "name": b.get("Name"),
+                        "title": b.get("Title"),
+                        "domain": b.get("Domain"),
+                        "breach_date": b.get("BreachDate"),
+                        "pwn_count": b.get("PwnCount"),
+                        "data_classes": b.get("DataClasses"),
+                    } for b in matches[:20]
+                ]
+        return "HIBP (Breach List)", None
+
+    def check_intelx_free(self, query):
+        """IntelligenceX free tier — public leak search."""
+        res = self._request("GET", f"https://free.intelx.io/phonebook/search?k=&term={query}&maxresults=20")
+        if res and res.status_code == 200:
+            d = res.json()
+            if d.get("id"):
+                time.sleep(1)
+                res2 = self._request("GET", f"https://free.intelx.io/phonebook/search/result?id={d['id']}&limit=20")
+                if res2 and res2.status_code == 200:
+                    d2 = res2.json()
+                    if d2.get("selectors"):
+                        return "IntelligenceX (Free)", [
+                            {"selector": s.get("selectorvalue"), "type": s.get("selectortype")}
+                            for s in d2.get("selectors", [])[:20]
+                        ]
+        return "IntelligenceX (Free)", None
+
+    def check_hudson_rock_email(self, email):
+        res = self._request("GET",
+            f"https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-email?email={email}")
+        if res and res.status_code == 200:
+            d = res.json()
+            if d.get("message") or d.get("stealers") or d.get("data"):
+                return "Hudson Rock", d
+        return "Hudson Rock", None
+
+    def check_hudson_rock_username(self, username):
+        res = self._request("GET",
+            f"https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-username?username={username}")
+        if res and res.status_code == 200:
+            d = res.json()
+            if d.get("message") or d.get("stealers") or d.get("data"):
+                return "Hudson Rock", d
+        return "Hudson Rock", None
+
+    # ============================================================
+    # FREE NON-BREACH SOURCES
     # ============================================================
 
     def check_xposedornot(self, email):
@@ -63,24 +159,6 @@ class OSINTLookup:
             if d.get("status") == "success":
                 return "IP-API", d
         return "IP-API", None
-
-    def check_hudson_rock_email(self, email):
-        res = self._request("GET",
-            f"https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-email?email={email}")
-        if res and res.status_code == 200:
-            d = res.json()
-            if d.get("message") or d.get("stealers") or d.get("data"):
-                return "Hudson Rock", d
-        return "Hudson Rock", None
-
-    def check_hudson_rock_username(self, username):
-        res = self._request("GET",
-            f"https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-username?username={username}")
-        if res and res.status_code == 200:
-            d = res.json()
-            if d.get("message") or d.get("stealers") or d.get("data"):
-                return "Hudson Rock", d
-        return "Hudson Rock", None
 
     def check_gravatar(self, email):
         h = hashlib.md5(email.strip().lower().encode()).hexdigest()
@@ -123,15 +201,12 @@ class OSINTLookup:
                 uid = user.get("id")
                 info_res = self._request("GET", f"https://users.roblox.com/v1/users/{uid}")
                 info = info_res.json() if info_res and info_res.status_code == 200 else {}
-                # Also try to get friends count
                 friends_res = self._request("GET", f"https://friends.roblox.com/v1/users/{uid}/friends/count")
                 friends = friends_res.json() if friends_res and friends_res.status_code == 200 else {}
                 return "Roblox", {
-                    "id": uid,
-                    "username": user.get("name"),
+                    "id": uid, "username": user.get("name"),
                     "display_name": user.get("displayName"),
-                    "created": info.get("created"),
-                    "description": info.get("description"),
+                    "created": info.get("created"), "description": info.get("description"),
                     "is_banned": info.get("isBanned"),
                     "has_verified_badge": info.get("hasVerifiedBadge"),
                     "friends_count": friends.get("count"),
@@ -147,8 +222,7 @@ class OSINTLookup:
             history_res = self._request("GET", f"https://api.mojang.com/user/profiles/{uuid}/names")
             history = history_res.json() if history_res and history_res.status_code == 200 else []
             return "Minecraft", {
-                "username": d.get("name"),
-                "uuid": uuid,
+                "username": d.get("name"), "uuid": uuid,
                 "name_history": [h.get("name") for h in history],
             }
         return "Minecraft", None
@@ -182,7 +256,7 @@ class OSINTLookup:
         return "Site Presence", None
 
     # ============================================================
-    # KEY-BASED SOURCES
+    # KEY-BASED
     # ============================================================
 
     def check_ipinfo(self, ip):
@@ -243,11 +317,10 @@ class OSINTLookup:
         return "Leak-Lookup", None
 
     # ============================================================
-    # ORCHESTRATOR
+    # ORCHESTRATOR — breaches FIRST, socials LAST
     # ============================================================
 
     def run_all_checks(self, query, query_type):
-        # Warn about missing keys
         missing = []
         for key_name, api in [("leakcheck", "LeakCheck"),
                               ("breachdirectory", "BreachDirectory"),
@@ -255,28 +328,32 @@ class OSINTLookup:
             if not self._key(key_name):
                 missing.append(api)
         if missing:
-            print_error("Config", f"Missing API keys for: {', '.join(missing)} — edit conf.json")
+            print_error("Config", f"Missing keys: {', '.join(missing)} — get free keys to unlock full breach data")
 
         tasks = []
+
+        # ========== BREACH SOURCES FIRST ==========
+        if query_type in ["username", "email"]:
+            tasks += [
+                ("ProxyNova COMB", self.check_proxynova, (query,)),
+                ("LeakCheck (Public)", self.check_leakcheck_public, (query,)),
+                ("IntelligenceX (Free)", self.check_intelx_free, (query,)),
+                ("psbdmp (Pastebin)", self.check_psbdmp, (query,)),
+                ("HIBP (Breach List)", self.check_hibp_breaches, (query,)),
+            ]
 
         if query_type == "email":
             tasks += [
                 ("XposedOrNot", self.check_xposedornot, (query,)),
-                ("Hunter.io", self.check_hunterio, (query,)),
                 ("Hudson Rock", self.check_hudson_rock_email, (query,)),
                 ("Gravatar", self.check_gravatar, (query,)),
                 ("EmailRep", self.check_emailrep, (query,)),
-                ("GitHub", self.check_github, (query,)),
+                ("Hunter.io", self.check_hunterio, (query,)),
             ]
 
         if query_type == "username":
             tasks += [
-                ("GitHub", self.check_github, (query,)),
                 ("Hudson Rock", self.check_hudson_rock_username, (query,)),
-                ("Roblox", self.check_roblox, (query,)),
-                ("Minecraft", self.check_minecraft, (query,)),
-                ("Discord", self.check_discord, (query,)),
-                ("Site Presence", self._run_site_checker, (query,)),
             ]
 
         if query_type == "ip":
@@ -289,16 +366,26 @@ class OSINTLookup:
         if query_type == "domain":
             tasks += [("DNS Records", self.check_dns, (query,))]
 
-        if query_type in ["email", "username"]:
-            tasks.append(("psbdmp (Pastebin)", self.check_psbdmp, (query,)))
-
+        # ========== BREACH KEY APIs ==========
         tasks.append(("LeakCheck", self.check_leakcheck, (query,)))
         tasks.append(("BreachDirectory", self.check_breachdirectory, (query,)))
         if query_type in ["email", "username", "phone", "ip"]:
             tasks.append(("Leak-Lookup", self.check_leaklookup, (query, query_type)))
 
+        # ========== SOCIALS LAST ==========
+        if query_type in ["username", "email"]:
+            tasks.append(("GitHub", self.check_github, (query,)))
+
+        if query_type == "username":
+            tasks += [
+                ("Roblox", self.check_roblox, (query,)),
+                ("Minecraft", self.check_minecraft, (query,)),
+                ("Discord", self.check_discord, (query,)),
+                ("Site Presence", self._run_site_checker, (query,)),
+            ]
+
         results = []
-        with ThreadPoolExecutor(max_workers=8) as executor:
+        with ThreadPoolExecutor(max_workers=10) as executor:
             futures = {executor.submit(fn, *args): name for name, fn, args in tasks}
             for fut in as_completed(futures):
                 name = futures[fut]
@@ -313,4 +400,13 @@ class OSINTLookup:
                         print_info(f"{src}: no data")
                 except Exception as e:
                     print_error(name, f"Error: {e}")
+
+        # Sort so breach sources appear first
+        breach_first = ["ProxyNova", "LeakCheck", "BreachDirectory", "Leak-Lookup",
+                        "Hudson Rock", "IntelligenceX", "psbdmp", "HIBP",
+                        "XposedOrNot", "EmailRep", "Hunter.io"]
+        results.sort(key=lambda x: (
+            next((i for i, b in enumerate(breach_first) if b in x[0]), 999),
+            x[0]
+        ))
         return results
