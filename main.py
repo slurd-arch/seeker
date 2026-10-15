@@ -1,93 +1,140 @@
 import argparse
 import sys
 from colorama import Fore
-from utils import load_config, print_banner, print_tagline, format_results_for_display, save_to_file
+from utils import (load_config, print_banner, print_tagline, format_results_for_display,
+                   print_info, Spinner, calculate_risk, print_risk_bar)
 from apis import OSINTLookup
+from output_handler import OutputHandler
+from validators import validate
+from history import add_to_history
 from help import HELP_TEXT
 
+
 def main():
-    # 1. Always print the banner first
     print_banner()
 
-    # 2. Setup argument parser with short flags
-    parser = argparse.ArgumentParser(
-        description="Multi OSINT Tool - Breach & Data Lookup",
-        add_help=False
-    )
-    
-    parser.add_argument("-h", "--help", action="store_true", help="Show this help message")
-    parser.add_argument("-e", "--email", type=str, help="Search by Email address")
-    parser.add_argument("-u", "--username", type=str, help="Search by Username")
-    parser.add_argument("-p", "--phone", type=str, help="Search by Phone Number")
-    parser.add_argument("-i", "--ip", type=str, help="Search by IP Address")
-    parser.add_argument("-r", "--roblox", type=str, help="Search by Roblox Username")
-    parser.add_argument("-d", "--discord", type=str, help="Search by Discord Username/ID")
-    parser.add_argument("-m", "--minecraft", type=str, help="Search by Minecraft Username")
-
-    args = parser.parse_args()
-
-    # 3. Handle `python main.py` (No arguments)
     if len(sys.argv) == 1:
         print_tagline()
-        sys.exit(0)
+        config = load_config()
+        lookup = OSINTLookup(config)
+        from menu import interactive_menu
+        interactive_menu(lookup)
+        return
 
-    # 4. Handle `python main.py -h` (Help flag)
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-h", "--help", action="store_true")
+    parser.add_argument("-e", "--email", type=str)
+    parser.add_argument("-u", "--username", type=str)
+    parser.add_argument("-p", "--phone", type=str)
+    parser.add_argument("-i", "--ip", type=str)
+    parser.add_argument("-r", "--roblox", type=str)
+    parser.add_argument("-d", "--discord", type=str)
+    parser.add_argument("-m", "--minecraft", type=str)
+    parser.add_argument("-D", "--domain", type=str)
+    parser.add_argument("-b", "--bulk", type=str)
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--html", action="store_true")
+    parser.add_argument("--all", action="store_true")
+    args = parser.parse_args()
+
     if args.help:
         print(HELP_TEXT)
         sys.exit(0)
 
-    # 5. Handle search queries
-    query = ""
-    query_type = ""
-    
-    if args.email:
-        query, query_type = args.email, "email"
-    elif args.username:
-        query, query_type = args.username, "username"
-    elif args.phone:
-        query, query_type = args.phone, "phone"
-    elif args.ip:
-        query, query_type = args.ip, "ip"
-    elif args.roblox:
-        query, query_type = args.roblox, "username"
-        print(f"[*] Querying Roblox: {query}")
-    elif args.discord:
-        query, query_type = args.discord, "username"
-        print(f"[*] Querying Discord: {query}")
-    elif args.minecraft:
-        query, query_type = args.minecraft, "username"
-        print(f"[*] Querying Minecraft: {query}")
-    else:
-        print(Fore.RED + "[!] No valid query provided. Use -h for help.")
-        sys.exit(1)
-
-    # 6. Run the OSINT checks
     config = load_config()
-    if not config:
-        print("[!] Warning: No API keys loaded. Only keyless APIs will work.")
-
     lookup = OSINTLookup(config)
 
-    print(f"[*] Searching breach databases for: {query} (Type: {query_type})\n")
+    formats = ["txt"]
+    if args.all:
+        formats = ["txt", "json", "html"]
+    elif args.json:
+        formats = ["json"]
+    elif args.html:
+        formats = ["html"]
 
-    raw_results = lookup.run_all_checks(query, query_type)
+    if args.bulk:
+        qt = "email"
+        if args.username: qt = "username"
+        elif args.ip: qt = "ip"
+        elif args.phone: qt = "phone"
+        elif args.domain: qt = "domain"
+        _bulk(lookup, args.bulk, qt, formats)
+        return
 
-    # 7. Display and save results
-    if raw_results:
-        formatted_output = format_results_for_display(raw_results)
-        
-        print("\n" + "=" * 60)
-        print("📊 SUMMARY OF FINDINGS")
-        print("=" * 60)
-        print(formatted_output)
-        
-        save_to_file(formatted_output, query, query_type)
+    query, qt, label = "", "", ""
+    if args.email: query, qt, label = args.email, "email", "Email"
+    elif args.username: query, qt, label = args.username, "username", "Username"
+    elif args.phone: query, qt, label = args.phone, "phone", "Phone"
+    elif args.ip: query, qt, label = args.ip, "ip", "IP"
+    elif args.roblox: query, qt, label = args.roblox, "username", "Roblox"
+    elif args.discord: query, qt, label = args.discord, "username", "Discord"
+    elif args.minecraft: query, qt, label = args.minecraft, "username", "Minecraft"
+    elif args.domain: query, qt, label = args.domain, "domain", "Domain"
     else:
-        print("\n[!] No data found across any checked APIs.")
+        print(Fore.RED + "[!] No valid query. Use -h.")
+        sys.exit(1)
+
+    ok, result = validate(query, qt)
+    if not ok:
+        print(Fore.RED + f"[!] Invalid input: {result}")
+        sys.exit(1)
+    query = result
+
+    print_info(f"Searching {label}: {query}")
+    spinner = Spinner(f"Querying APIs for {query}")
+    spinner.start()
+    results = lookup.run_all_checks(query, qt)
+    spinner.stop()
+
+    add_to_history(query, qt, len(results))
+    _output(results, query, qt, formats)
+
+
+def _bulk(lookup, filepath, qt, formats):
+    try:
+        with open(filepath) as f:
+            targets = [l.strip() for l in f if l.strip()]
+    except FileNotFoundError:
+        print(Fore.RED + f"[!] File not found: {filepath}")
+        return
+    if not targets:
+        print(Fore.RED + "[!] File is empty.")
+        return
+
+    print_info(f"Bulk searching {len(targets)} targets...")
+    handler = OutputHandler()
+    for i, t in enumerate(targets, 1):
+        print(f"\n{'='*60}\n[{i}/{len(targets)}] {t}\n{'='*60}")
+        ok, result = validate(t, qt)
+        if not ok:
+            print(Fore.RED + f"[!] Skipping: {result}")
+            continue
+        results = lookup.run_all_checks(result, qt)
+        add_to_history(result, qt, len(results))
+        if results:
+            print(format_results_for_display(results))
+            handler.save(results, result, qt, formats)
+    print_info("Bulk search complete.")
+
+
+def _output(results, query, qt, formats):
+    if not results:
+        print(Fore.RED + "\n[!] No data found.")
+        return
+    print("\n" + Fore.YELLOW + "=" * 60)
+    print(Fore.CYAN + "📊 SUMMARY OF FINDINGS")
+    print(Fore.YELLOW + "=" * 60)
+    print(format_results_for_display(results))
+
+    score, label, color = calculate_risk(results)
+    print_risk_bar(score, label, color)
+
+    OutputHandler().save(results, query, qt, formats)
+
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n[!] Operation cancelled by user.")
+        print("\n[!] Cancelled.")
         sys.exit(0)
