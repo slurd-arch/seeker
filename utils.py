@@ -1,4 +1,3 @@
-cat > utils.py << 'EOF'
 import json
 import os
 import sys
@@ -173,4 +172,3 @@ def format_results_for_display(results):
         out += _format_value(data, indent=2)
         out += "\n"
     return out
-EOF
