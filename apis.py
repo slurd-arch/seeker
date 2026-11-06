@@ -44,94 +44,112 @@ class OSINTLookup:
     # ============================================================
 
     def check_proxynova(self, username):
-        """ProxyNova COMB — 3.2 BILLION leaked creds, free, no key."""
         res = self._request("GET", f"https://api.proxynova.com/comb?query={username}&limit=100")
         if res and res.status_code == 200:
-            d = res.json()
-            lines = d.get("lines", [])
-            if lines:
-                records = []
-                for line in lines[:100]:
-                    if ":" in line:
-                        email, pw = line.split(":", 1)
-                        records.append({"email": email, "password": pw, "raw": line})
-                    else:
-                        records.append({"raw": line})
-                return "ProxyNova COMB", {
-                    "count": d.get("count", len(records)),
-                    "records": records,
-                }
+            try:
+                d = res.json()
+                lines = d.get("lines", [])
+                if lines:
+                    records = []
+                    target = username.lower()
+                    # Filter to ONLY exact matches so we don't get random emails
+                    for line in lines:
+                        if target in line.lower():
+                            if ":" in line:
+                                email, pw = line.split(":", 1)
+                                records.append({"email": email, "password": pw})
+                            else:
+                                records.append({"raw": line})
+                    
+                    if records:
+                        return "ProxyNova COMB", {
+                            "exact_matches": len(records),
+                            "records": records[:50]
+                        }
+            except Exception:
+                pass
         return "ProxyNova COMB", None
 
     def check_leakcheck_public(self, query):
-        """LeakCheck public API — free, no key. Returns breach source names."""
         res = self._request("GET", f"https://leakcheck.io/api/public?check={query}")
         if res and res.status_code == 200:
-            d = res.json()
-            if d.get("success") and d.get("sources"):
-                return "LeakCheck (Public)", {
-                    "found": d.get("found"),
-                    "fields": d.get("fields"),
-                    "sources": d.get("sources"),
-                }
+            try:
+                d = res.json()
+                if d.get("success") and d.get("sources"):
+                    return "LeakCheck (Public)", {
+                        "found": d.get("found"),
+                        "fields": d.get("fields"),
+                        "sources": d.get("sources"),
+                    }
+            except Exception:
+                pass
         return "LeakCheck (Public)", None
 
     def check_hibp_breaches(self, query):
-        """HIBP public breach list — free, no key."""
         res = self._request("GET", "https://haveibeenpwned.com/api/v3/breaches",
                             headers={"User-Agent": "Seeker-OSINT"})
         if res and res.status_code == 200:
-            breaches = res.json()
-            matches = [b for b in breaches
-                       if query.lower() in b.get("Name", "").lower()
-                       or query.lower() in b.get("Description", "").lower()
-                       or query.lower() in b.get("Title", "").lower()]
-            if matches:
-                return "HIBP (Breach List)", [
-                    {
-                        "name": b.get("Name"),
-                        "title": b.get("Title"),
-                        "domain": b.get("Domain"),
-                        "breach_date": b.get("BreachDate"),
-                        "pwn_count": b.get("PwnCount"),
-                        "data_classes": b.get("DataClasses"),
-                    } for b in matches[:20]
-                ]
+            try:
+                breaches = res.json()
+                matches = [b for b in breaches
+                           if query.lower() in b.get("Name", "").lower()
+                           or query.lower() in b.get("Description", "").lower()
+                           or query.lower() in b.get("Title", "").lower()]
+                if matches:
+                    return "HIBP (Breach List)", [
+                        {
+                            "name": b.get("Name"),
+                            "title": b.get("Title"),
+                            "breach_date": b.get("BreachDate"),
+                            "pwn_count": b.get("PwnCount"),
+                        } for b in matches[:20]
+                    ]
+            except Exception:
+                pass
         return "HIBP (Breach List)", None
 
     def check_intelx_free(self, query):
-        """IntelligenceX free tier — public leak search."""
         res = self._request("GET", f"https://free.intelx.io/phonebook/search?k=&term={query}&maxresults=20")
         if res and res.status_code == 200:
-            d = res.json()
-            if d.get("id"):
-                time.sleep(1)
-                res2 = self._request("GET", f"https://free.intelx.io/phonebook/search/result?id={d['id']}&limit=20")
-                if res2 and res2.status_code == 200:
-                    d2 = res2.json()
-                    if d2.get("selectors"):
-                        return "IntelligenceX (Free)", [
-                            {"selector": s.get("selectorvalue"), "type": s.get("selectortype")}
-                            for s in d2.get("selectors", [])[:20]
-                        ]
+            try:
+                d = res.json()
+                if d.get("id"):
+                    time.sleep(1)
+                    res2 = self._request("GET", f"https://free.intelx.io/phonebook/search/result?id={d['id']}&limit=20")
+                    if res2 and res2.status_code == 200:
+                        d2 = res2.json()
+                        if d2.get("selectors"):
+                            return "IntelligenceX (Free)", [
+                                {"selector": s.get("selectorvalue"), "type": s.get("selectortype")}
+                                for s in d2.get("selectors", [])[:20]
+                            ]
+            except Exception:
+                pass
         return "IntelligenceX (Free)", None
 
     def check_hudson_rock_email(self, email):
         res = self._request("GET",
             f"https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-email?email={email}")
         if res and res.status_code == 200:
-            d = res.json()
-            if d.get("message") or d.get("stealers") or d.get("data"):
-                return "Hudson Rock", d
+            try:
+                d = res.json()
+                # Only return if actually infected!
+                if (d.get("stealers") and len(d["stealers"]) > 0) or d.get("data", {}).get("total_user_services", 0) > 0:
+                    return "Hudson Rock", d
+            except Exception:
+                pass
         return "Hudson Rock", None
 
     def check_hudson_rock_username(self, username):
         res = self._request("GET",
             f"https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-username?username={username}")
         if res and res.status_code == 200:
-            d = res.json()
-            if d.get("message") or d.get("stealers") or d.get("data"):
-                return "Hudson Rock", d
+            try:
+                d = res.json()
+                if d.get("stealers") and len(d["stealers"]) > 0:
+                    return "Hudson Rock", d
+            except Exception:
+                pass
         return "Hudson Rock", None
 
     # ============================================================
@@ -141,44 +159,64 @@ class OSINTLookup:
     def check_xposedornot(self, email):
         res = self._request("GET", f"https://api.xposedornot.com/v1/check-email/{email}")
         if res and res.status_code == 200:
-            d = res.json()
-            if d.get("breaches"):
-                return "XposedOrNot", d
+            try:
+                d = res.json()
+                if d.get("breaches"):
+                    return "XposedOrNot", d
+            except Exception:
+                pass
         return "XposedOrNot", None
 
     def check_hackmyip(self, ip):
         res = self._request("GET", f"https://hackmyip.com/api/v1/ip/{ip}")
         if res and res.status_code == 200:
-            return "HackMyIP", res.json()
+            try:
+                return "HackMyIP", res.json()
+            except Exception:
+                pass
         return "HackMyIP", None
 
     def check_ipapi(self, ip):
         res = self._request("GET", f"http://ip-api.com/json/{ip}?fields=66846719")
         if res and res.status_code == 200:
-            d = res.json()
-            if d.get("status") == "success":
-                return "IP-API", d
+            try:
+                d = res.json()
+                if d.get("status") == "success":
+                    return "IP-API", d
+            except Exception:
+                pass
         return "IP-API", None
 
     def check_gravatar(self, email):
         h = hashlib.md5(email.strip().lower().encode()).hexdigest()
         res = self._request("GET", f"https://www.gravatar.com/{h}.json")
         if res and res.status_code == 200:
-            return "Gravatar", res.json()
+            try:
+                return "Gravatar", res.json()
+            except Exception:
+                pass
         return "Gravatar", None
 
     def check_emailrep(self, email):
         res = self._request("GET", f"https://emailrep.io/{email}")
         if res and res.status_code == 200:
-            return "EmailRep", res.json()
+            try:
+                # Sometimes EmailRep returns HTML/plain text if rate limited
+                d = res.json()
+                return "EmailRep", d
+            except Exception:
+                pass
         return "EmailRep", None
 
     def check_psbdmp(self, query):
         res = self._request("GET", f"https://psbdmp.ws/api/v3/search/{query}")
         if res and res.status_code == 200:
-            d = res.json()
-            if d.get("data"):
-                return "psbdmp (Pastebin)", d
+            try:
+                d = res.json()
+                if d.get("data"):
+                    return "psbdmp (Pastebin)", d
+            except Exception:
+                pass
         return "psbdmp (Pastebin)", None
 
     def check_github(self, username):
@@ -188,51 +226,63 @@ class OSINTLookup:
             headers["Authorization"] = f"token {token}"
         res = self._request("GET", f"https://api.github.com/users/{username}", headers=headers)
         if res and res.status_code == 200:
-            return "GitHub", res.json()
+            try:
+                return "GitHub", res.json()
+            except Exception:
+                pass
         return "GitHub", None
 
     def check_roblox(self, username):
         res = self._request("POST", "https://users.roblox.com/v1/usernames/users",
                             json={"usernames": [username], "excludeBannedUsers": False})
         if res and res.status_code == 200:
-            d = res.json().get("data", [])
-            if d:
-                user = d[0]
-                uid = user.get("id")
-                info_res = self._request("GET", f"https://users.roblox.com/v1/users/{uid}")
-                info = info_res.json() if info_res and info_res.status_code == 200 else {}
-                friends_res = self._request("GET", f"https://friends.roblox.com/v1/users/{uid}/friends/count")
-                friends = friends_res.json() if friends_res and friends_res.status_code == 200 else {}
-                return "Roblox", {
-                    "id": uid, "username": user.get("name"),
-                    "display_name": user.get("displayName"),
-                    "created": info.get("created"), "description": info.get("description"),
-                    "is_banned": info.get("isBanned"),
-                    "has_verified_badge": info.get("hasVerifiedBadge"),
-                    "friends_count": friends.get("count"),
-                    "profile_url": f"https://www.roblox.com/users/{uid}/profile",
-                }
+            try:
+                d = res.json().get("data", [])
+                if d:
+                    user = d[0]
+                    uid = user.get("id")
+                    info_res = self._request("GET", f"https://users.roblox.com/v1/users/{uid}")
+                    info = info_res.json() if info_res and info_res.status_code == 200 else {}
+                    friends_res = self._request("GET", f"https://friends.roblox.com/v1/users/{uid}/friends/count")
+                    friends = friends_res.json() if friends_res and friends_res.status_code == 200 else {}
+                    return "Roblox", {
+                        "id": uid, "username": user.get("name"),
+                        "display_name": user.get("displayName"),
+                        "created": info.get("created"), "description": info.get("description"),
+                        "is_banned": info.get("isBanned"),
+                        "has_verified_badge": info.get("hasVerifiedBadge"),
+                        "friends_count": friends.get("count"),
+                        "profile_url": f"https://www.roblox.com/users/{uid}/profile",
+                    }
+            except Exception:
+                pass
         return "Roblox", None
 
     def check_minecraft(self, username):
         res = self._request("GET", f"https://api.mojang.com/users/profiles/minecraft/{username}")
         if res and res.status_code == 200:
-            d = res.json()
-            uuid = d.get("id")
-            history_res = self._request("GET", f"https://api.mojang.com/user/profiles/{uuid}/names")
-            history = history_res.json() if history_res and history_res.status_code == 200 else []
-            return "Minecraft", {
-                "username": d.get("name"), "uuid": uuid,
-                "name_history": [h.get("name") for h in history],
-            }
+            try:
+                d = res.json()
+                uuid = d.get("id")
+                history_res = self._request("GET", f"https://api.mojang.com/user/profiles/{uuid}/names")
+                history = history_res.json() if history_res and history_res.status_code == 200 else []
+                return "Minecraft", {
+                    "username": d.get("name"), "uuid": uuid,
+                    "name_history": [h.get("name") for h in history],
+                }
+            except Exception:
+                pass
         return "Minecraft", None
 
     def check_discord(self, discord_id):
         res = self._request("GET", f"https://discordlookup.mesavirep.xyz/v1/user/{discord_id}")
         if res and res.status_code == 200:
-            d = res.json()
-            if d.get("id"):
-                return "Discord", d
+            try:
+                d = res.json()
+                if d.get("id"):
+                    return "Discord", d
+            except Exception:
+                pass
         return "Discord", None
 
     def check_dns(self, domain):
@@ -242,9 +292,12 @@ class OSINTLookup:
                 f"https://cloudflare-dns.com/dns-query?name={domain}&type={rtype}",
                 headers={"Accept": "application/dns-json"})
             if res and res.status_code == 200:
-                answers = res.json().get("Answer", [])
-                if answers:
-                    results[rtype] = [a.get("data") for a in answers]
+                try:
+                    answers = res.json().get("Answer", [])
+                    if answers:
+                        results[rtype] = [a.get("data") for a in answers]
+                except Exception:
+                    pass
         if results:
             return "DNS Records", results
         return "DNS Records", None
@@ -265,7 +318,10 @@ class OSINTLookup:
             return "IPinfo", "API key missing"
         res = self._request("GET", f"https://ipinfo.io/{ip}/json?token={key}")
         if res and res.status_code == 200:
-            return "IPinfo", res.json()
+            try:
+                return "IPinfo", res.json()
+            except Exception:
+                pass
         return "IPinfo", None
 
     def check_hunterio(self, email):
@@ -275,7 +331,10 @@ class OSINTLookup:
         res = self._request("GET",
             f"https://api.hunter.io/v2/email-verifier?email={email}&api_key={key}")
         if res and res.status_code == 200:
-            return "Hunter.io", res.json()
+            try:
+                return "Hunter.io", res.json()
+            except Exception:
+                pass
         return "Hunter.io", None
 
     def check_leakcheck(self, query):
@@ -285,9 +344,12 @@ class OSINTLookup:
         res = self._request("GET", f"https://leakcheck.io/api/v2/query/{query}",
                             headers={"X-API-Key": key})
         if res and res.status_code == 200:
-            d = res.json()
-            if d.get("found"):
-                return "LeakCheck", d
+            try:
+                d = res.json()
+                if d.get("found"):
+                    return "LeakCheck", d
+            except Exception:
+                pass
         return "LeakCheck", None
 
     def check_breachdirectory(self, query):
@@ -299,9 +361,12 @@ class OSINTLookup:
         res = self._request("GET", "https://breachdirectory.p.rapidapi.com/",
                             headers=headers, params={"func": "auto", "term": query})
         if res and res.status_code == 200:
-            d = res.json()
-            if d.get("found"):
-                return "BreachDirectory", d
+            try:
+                d = res.json()
+                if d.get("found"):
+                    return "BreachDirectory", d
+            except Exception:
+                pass
         return "BreachDirectory", None
 
     def check_leaklookup(self, query, query_type):
@@ -311,13 +376,16 @@ class OSINTLookup:
         res = self._request("POST", "https://leak-lookup.com/api/search",
                             data={"key": key, "type": query_type, "query": query})
         if res and res.status_code == 200:
-            j = res.json()
-            if j.get("error") == "false" and j.get("data"):
-                return "Leak-Lookup", j
+            try:
+                j = res.json()
+                if j.get("error") == "false" and j.get("data"):
+                    return "Leak-Lookup", j
+            except Exception:
+                pass
         return "Leak-Lookup", None
 
     # ============================================================
-    # ORCHESTRATOR — breaches FIRST, socials LAST
+    # ORCHESTRATOR
     # ============================================================
 
     def run_all_checks(self, query, query_type):
@@ -401,7 +469,6 @@ class OSINTLookup:
                 except Exception as e:
                     print_error(name, f"Error: {e}")
 
-        # Sort so breach sources appear first
         breach_first = ["ProxyNova", "LeakCheck", "BreachDirectory", "Leak-Lookup",
                         "Hudson Rock", "IntelligenceX", "psbdmp", "HIBP",
                         "XposedOrNot", "EmailRep", "Hunter.io"]
